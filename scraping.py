@@ -6,6 +6,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 import pandas as pd
 import datetime as dt
 
+from urllib.parse import urljoin    # https://docs.python.org/3/library/urllib.parse.html#module-urllib.parse
+
 # # Set up Splinter
 # executable_path = {'executable_path': ChromeDriverManager().install()}
 
@@ -26,14 +28,14 @@ def scrape_all():
         incognito=True  # No need to save sites visited in browser History
     )
     
-    news_title, news_paragraph = mars_news(browser)
-    
     # Run all scraping functions and store results in dictionary
+    news_title, news_paragraph = mars_news(browser)
     data = {
         "news_title":news_title,
         "news_paragraph":news_paragraph,
         "featured_image":featured_image(browser),
         "facts":mars_facts(),
+        "hemispheres":mars_hemispheres(browser),    # list of hemisphere image URLs and titles
         "last_modified":dt.datetime.now()
     }
     
@@ -51,8 +53,7 @@ def mars_news(browser):
     browser.is_element_present_by_css('div.list_text', wait_time=1)
     
     # Convert the browser html to a soup object and then quit the browser
-    html = browser.html
-    news_soup = soup(html, 'html.parser')
+    news_soup = soup(browser.html, 'html.parser')
     
     # try/except for error handling
     try:
@@ -81,8 +82,7 @@ def featured_image(browser):
     full_image_elem.click()
     
     # Parse the resulting html with soup
-    html = browser.html
-    img_soup = soup(html, 'html.parser')
+    img_soup = soup(browser.html, 'html.parser')
     
     try:
         # Find the relative image url
@@ -109,6 +109,38 @@ def mars_facts():
     
     # Convert dataframe into HTML format, add bootstrap
     return df.to_html(classes="table table-striped")
+
+# ## Mars hemisphere images and information
+def mars_hemispheres(browser):
+    # Visit URL
+    url = 'https://marshemispheres.com/'
+    browser.visit(url)
+    hemispheres_soup = soup(browser.html, 'html.parser')
+    
+    # Get code blocks containing links to pages with individual hemisphere information
+    item_links = (
+        hemispheres_soup
+        .find('div', class_='collapsible results')
+        .find_all('div', class_="description")
+    )
+    
+    # Extract list of URLs from the links
+    img_page_urls = [urljoin(url, link.a["href"]) for link in item_links]
+    
+    # Create list to hold hemisphere images and titles.
+    hemisphere_list = []
+    
+    # Retrieve image URLs and titles for each hemisphere.
+    for page in img_page_urls:
+        browser.visit(page)
+        # browser.is_text_present('Sample', wait_time=2)  # Optional delay for loading the page
+        page_soup = soup(browser.html, 'html.parser')
+        hemisphere_list.append({
+            'img_url':urljoin(page, page_soup.find('a', text='Sample')['href']),
+            'title':page_soup.find('h2', class_='title').text
+        })
+    
+    return hemisphere_list
 
 if __name__ == "__main__":
     # If running as script, print scraped data
